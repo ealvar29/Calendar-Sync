@@ -25,35 +25,29 @@ export default function RoomPage() {
   // ── Initial load ────────────────────────────────────────────
   useEffect(() => {
     async function load() {
-      console.log("[load] start, code=", code);
       const supabase = createClient();
-      console.log("[load] supabase client created");
       const {
         data: { user },
-        error: userError,
       } = await supabase.auth.getUser();
-      console.log("[load] getUser →", user?.id ?? null, "error:", userError?.message ?? null);
       if (!user) { router.replace("/"); return; }
       setCurrentUserId(user.id);
 
       const upperCode = (code as string).toUpperCase();
 
       // RLS: only returns the group if the user is already a member
-      const { data: groupData, error: groupError } = await supabase
+      const { data: groupData } = await supabase
         .from("groups")
         .select("*")
         .eq("invite_code", upperCode)
         .single();
-      console.log("[load] groupData:", groupData, "groupError:", groupError?.message ?? null);
 
       if (!groupData) { setNotMember(true); setLoading(false); return; }
       setGroup(groupData as Group);
 
-      const { data: memberRows, error: memberError } = await supabase
+      const { data: memberRows } = await supabase
         .from("group_members")
         .select("user_id, role")
         .eq("group_id", groupData.id);
-      console.log("[load] memberRows:", memberRows, "memberError:", memberError?.message ?? null);
 
       if (!memberRows) { setLoading(false); return; }
 
@@ -80,9 +74,8 @@ export default function RoomPage() {
       );
 
       setLoading(false);
-      console.log("[load] done");
     }
-    load().catch((err) => console.error("[load] UNCAUGHT:", err));
+    load();
   }, [code, router]);
 
   // ── Realtime: member join / leave / role change ─────────────
@@ -169,7 +162,6 @@ export default function RoomPage() {
 
   // ── Actions ─────────────────────────────────────────────────
   async function joinRoom() {
-    console.log("[joinRoom] called, code=", code);
     setJoinError("");
     setJoining(true);
     try {
@@ -178,7 +170,6 @@ export default function RoomPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invite_code: code }),
       });
-      console.log("[joinRoom] fetch status:", res.status, res.ok);
       if (res.ok) {
         window.location.reload();
         return;
@@ -186,14 +177,10 @@ export default function RoomPage() {
       let message = `Error ${res.status}`;
       try {
         const data = await res.json();
-        console.log("[joinRoom] error body:", data);
         message = data.error ?? message;
-      } catch (e) {
-        console.warn("[joinRoom] could not parse error body:", e);
-      }
+      } catch {}
       setJoinError(message);
-    } catch (err) {
-      console.error("[joinRoom] fetch threw:", err);
+    } catch {
       setJoinError("Network error — check the console and try again.");
     } finally {
       setJoining(false);
