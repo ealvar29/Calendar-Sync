@@ -50,7 +50,7 @@ export default function LandingPage() {
 
   if (step === "check_email") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-brand-50 to-white px-4">
+      <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-indigo-50 via-white to-amber-50 px-4">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="text-5xl">📬</div>
           <h1 className="text-2xl font-bold text-slate-900">Check your email</h1>
@@ -75,14 +75,14 @@ export default function LandingPage() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-brand-50 to-white px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-indigo-50 via-white to-amber-50 px-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="text-5xl mb-4">📅</div>
+          <div className="text-5xl mb-4 tracking-tight">☀️📅🌙</div>
           <h1 className="text-4xl font-bold text-brand-900 tracking-tight">
             HangoutSync
           </h1>
-          <p className="mt-3 text-lg text-slate-600">
+          <p className="mt-3 text-lg text-slate-500">
             Mark your free days. See when everyone&apos;s available.
           </p>
         </div>
@@ -147,9 +147,22 @@ export default function LandingPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-400">
-          No password. No Google. Just your email.
-        </p>
+        {/* Feature pills */}
+        <div className="flex flex-wrap justify-center gap-2">
+          {[
+            "☀️ Day & night slots",
+            "📝 Group notes",
+            "⚡ Live sync",
+            "🔒 No passwords",
+          ].map((pill) => (
+            <span
+              key={pill}
+              className="px-3 py-1 rounded-full text-xs bg-white/80 border border-slate-200 text-slate-500"
+            >
+              {pill}
+            </span>
+          ))}
+        </div>
       </div>
     </main>
   );

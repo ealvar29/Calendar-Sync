@@ -18,6 +18,7 @@ export default function RoomPage() {
   const [isHost, setIsHost] = useState(false);
   const [loading, setLoading] = useState(true);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -26,15 +27,13 @@ export default function RoomPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace("/"); return; }
       setCurrentUserId(user.id);
 
       const upperCode = (code as string).toUpperCase();
 
-      // RLS: only returns the group if the user is already a member
       const { data: groupData } = await supabase
         .from("groups")
         .select("*")
@@ -58,24 +57,31 @@ export default function RoomPage() {
       const userIds = memberRows.map((m) => m.user_id);
       const { data: profileRows } = await supabase
         .from("profiles")
-        .select("id, display_name")
+        .select("id, display_name, avatar")
         .in("id", userIds);
 
       const profileMap = new Map(
-        (profileRows ?? []).map((p) => [p.id, p.display_name as string | null])
+        (profileRows ?? []).map((p) => [p.id, {
+          display_name: p.display_name as string | null,
+          avatar: p.avatar as string | null,
+        }])
       );
 
       setMembers(
-        memberRows.map((m) => ({
-          user_id: m.user_id,
-          role: m.role as "host" | "member",
-          display_name: profileMap.get(m.user_id) ?? m.user_id.slice(0, 8),
-        }))
+        memberRows.map((m) => {
+          const profile = profileMap.get(m.user_id);
+          return {
+            user_id: m.user_id,
+            role: m.role as "host" | "member",
+            display_name: profile?.display_name ?? m.user_id.slice(0, 8),
+            avatar: profile?.avatar ?? null,
+          };
+        })
       );
 
       setLoading(false);
     }
-    load();
+    load().catch(console.error);
   }, [code, router]);
 
   // ── Realtime: member join / leave / role change ─────────────
@@ -97,7 +103,7 @@ export default function RoomPage() {
           const row = payload.new as { user_id: string; role: string };
           const { data: profile } = await supabase
             .from("profiles")
-            .select("id, display_name")
+            .select("id, display_name, avatar")
             .eq("id", row.user_id)
             .single();
           setMembers((prev) => {
@@ -107,9 +113,8 @@ export default function RoomPage() {
               {
                 user_id: row.user_id,
                 role: row.role as "host" | "member",
-                display_name:
-                  (profile?.display_name as string | null) ??
-                  row.user_id.slice(0, 8),
+                display_name: (profile?.display_name as string | null) ?? row.user_id.slice(0, 8),
+                avatar: (profile?.avatar as string | null) ?? null,
               },
             ];
           });
@@ -126,7 +131,6 @@ export default function RoomPage() {
         (payload) => {
           const row = payload.old as { user_id: string };
           if (row.user_id === currentUserId) {
-            // We were kicked — go back to dashboard
             router.push("/dashboard");
           } else {
             setMembers((prev) => prev.filter((m) => m.user_id !== row.user_id));
@@ -194,7 +198,6 @@ export default function RoomPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ groupId: group.id, userId }),
     });
-    // Optimistic — realtime DELETE event will also fire
     setMembers((prev) => prev.filter((m) => m.user_id !== userId));
   }
 
@@ -212,6 +215,14 @@ export default function RoomPage() {
     await navigator.clipboard.writeText(group!.invite_code);
     setInviteCopied(true);
     setTimeout(() => setInviteCopied(false), 2000);
+  }
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(
+      `${window.location.origin}/room/${group!.invite_code}`
+    );
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   }
 
   // ── Render: loading / not-member / not-found ─────────────────
@@ -291,7 +302,7 @@ export default function RoomPage() {
         {/* Room header */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h1 className="text-xl font-bold text-slate-900">{group.name}</h1>
-          <div className="flex items-center gap-3 mt-2">
+          <div className="flex flex-wrap items-center gap-3 mt-2">
             <span className="text-xs text-slate-500">Room code</span>
             <span className="font-mono font-bold text-brand-600 tracking-widest text-lg">
               {group.invite_code}
@@ -300,11 +311,17 @@ export default function RoomPage() {
               onClick={copyCode}
               className="text-xs px-3 py-1 rounded-lg bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
             >
-              {inviteCopied ? "Copied!" : "Copy"}
+              {inviteCopied ? "Copied!" : "Copy code"}
+            </button>
+            <button
+              onClick={copyLink}
+              className="text-xs px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            >
+              {linkCopied ? "Link copied!" : "Share link"}
             </button>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Share this code with anyone you want to add
+            Share the code or link with anyone you want to add
           </p>
         </div>
 
@@ -320,8 +337,12 @@ export default function RoomPage() {
                 className="flex items-center justify-between py-1"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-sm">
-                    {member.display_name[0]?.toUpperCase()}
+                  <div className="w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-semibold text-sm shrink-0">
+                    {member.avatar ? (
+                      <span className="text-lg leading-none">{member.avatar}</span>
+                    ) : (
+                      member.display_name[0]?.toUpperCase()
+                    )}
                   </div>
                   <span className="text-sm text-slate-700">
                     {member.display_name}

@@ -33,4 +33,5 @@ export interface MemberWithProfile {
   user_id: string;
   role: "host" | "member";
   display_name: string;
+  avatar: string | null;
 }
