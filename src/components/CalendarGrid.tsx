@@ -107,7 +107,7 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
   async function toggleDay(dateStr: string) {
     const current = availMap[dateStr]?.[currentUserId];
     const next: AvailabilityStatus | null =
-      !current ? "free" : current === "free" ? "busy" : null;
+      !current ? "day" : current === "day" ? "night" : current === "night" ? "busy" : null;
 
     // Optimistic update
     setAvailMap((prev) => {
@@ -147,10 +147,16 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
   const paddingCount = getDay(monthStart);
   const today = startOfDay(new Date());
 
-  const allFreeDays = days.filter((day) => {
+  const allDayDays = days.filter((day) => {
     if (members.length === 0) return false;
     const dateStr = format(day, "yyyy-MM-dd");
-    return members.every((m) => availMap[dateStr]?.[m.user_id] === "free");
+    return members.every((m) => availMap[dateStr]?.[m.user_id] === "day");
+  });
+
+  const allNightDays = days.filter((day) => {
+    if (members.length === 0) return false;
+    const dateStr = format(day, "yyyy-MM-dd");
+    return members.every((m) => availMap[dateStr]?.[m.user_id] === "night");
   });
 
   return (
@@ -209,8 +215,10 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
 
               const cellClass = [
                 "flex flex-col min-h-[64px] rounded-xl border p-1.5 text-left transition-all",
-                myStatus === "free"
-                  ? "bg-blue-50 border-blue-200"
+                myStatus === "day"
+                  ? "bg-amber-50 border-amber-200"
+                  : myStatus === "night"
+                  ? "bg-indigo-50 border-indigo-300"
                   : myStatus === "busy"
                   ? "bg-red-50 border-red-200"
                   : "bg-white border-slate-200",
@@ -229,25 +237,34 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                   disabled={isPast}
                   className={cellClass}
                 >
-                  <span
-                    className={`text-xs font-semibold ${
-                      isToday(day) ? "text-brand-600" : "text-slate-600"
-                    }`}
-                  >
-                    {format(day, "d")}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-xs font-semibold ${
+                        isToday(day) ? "text-brand-600" : "text-slate-600"
+                      }`}
+                    >
+                      {format(day, "d")}
+                    </span>
+                    {myStatus === "day" && <span className="text-xs leading-none">☀️</span>}
+                    {myStatus === "night" && <span className="text-xs leading-none">🌙</span>}
+                  </div>
                   {/* Member status dots */}
                   <div className="flex flex-wrap gap-0.5 mt-auto pt-1">
                     {members.map((member) => {
                       const status = dayAvail[member.user_id];
                       if (!status) return null;
+                      const dotColor =
+                        status === "day" ? "bg-amber-400"
+                        : status === "night" ? "bg-indigo-400"
+                        : status === "free" ? "bg-blue-400"
+                        : "bg-red-400";
                       return (
                         <span
                           key={member.user_id}
                           title={`${member.display_name}: ${status}`}
                           className={[
                             "inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold text-white",
-                            status === "free" ? "bg-blue-400" : "bg-red-400",
+                            dotColor,
                             member.user_id === currentUserId
                               ? "ring-1 ring-slate-400 ring-offset-[1px]"
                               : "",
@@ -266,34 +283,53 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
 
         {/* Legend */}
         <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200 inline-block" />
-            Free
-          </span>
+          <span className="flex items-center gap-1">☀️ Day</span>
+          <span className="flex items-center gap-1">🌙 Night</span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded bg-red-100 border border-red-200 inline-block" />
             Busy
           </span>
-          <span className="ml-auto">Click a day to toggle your status</span>
+          <span className="ml-auto">Click to cycle your status</span>
         </div>
       </div>
 
       {/* Everyone's free panel */}
-      {allFreeDays.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h3 className="font-semibold text-slate-800 mb-3">
-            Everyone&apos;s free 🎉
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {allFreeDays.map((day) => (
-              <span
-                key={format(day, "yyyy-MM-dd")}
-                className="px-3 py-1.5 bg-green-50 border border-green-200 text-green-800 rounded-full text-sm font-medium"
-              >
-                {format(day, "EEE, MMM d")}
-              </span>
-            ))}
-          </div>
+      {(allDayDays.length > 0 || allNightDays.length > 0) && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+          {allDayDays.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Everyone free daytime ☀️
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {allDayDays.map((day) => (
+                  <span
+                    key={format(day, "yyyy-MM-dd")}
+                    className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-sm font-medium"
+                  >
+                    {format(day, "EEE, MMM d")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {allNightDays.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-slate-800 mb-2">
+                Everyone free nighttime 🌙
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {allNightDays.map((day) => (
+                  <span
+                    key={format(day, "yyyy-MM-dd")}
+                    className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-full text-sm font-medium"
+                  >
+                    {format(day, "EEE, MMM d")}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
