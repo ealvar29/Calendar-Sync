@@ -19,7 +19,7 @@ export interface Profile {
   display_name: string | null;
 }
 
-export type AvailabilityStatus = "free" | "busy" | "day" | "night";
+export type AvailabilityStatus = "free" | "busy" | "day" | "night" | "homer";
 
 export interface Availability {
   id: string;

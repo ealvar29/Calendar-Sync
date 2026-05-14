@@ -24,6 +24,13 @@ interface Props {
 // dateStr (yyyy-MM-dd) → userId → status
 type AvailMap = Record<string, Record<string, AvailabilityStatus>>;
 
+const PICKER_OPTIONS: { status: AvailabilityStatus; label: string; icon: string }[] = [
+  { status: "day", label: "Day", icon: "☀️" },
+  { status: "night", label: "Night", icon: "🌙" },
+  { status: "busy", label: "Busy", icon: "🔴" },
+  { status: "free", label: "Free", icon: "✅" },
+];
+
 export default function CalendarGrid({ groupId, currentUserId, members }: Props) {
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -33,6 +40,7 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
   const [loading, setLoading] = useState(true);
   const [activeNoteDate, setActiveNoteDate] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState("");
+  const [openPickerDate, setOpenPickerDate] = useState<string | null>(null);
 
   const fetchMonthData = useCallback(async () => {
     setLoading(true);
@@ -75,10 +83,22 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
     fetchMonthData();
   }, [fetchMonthData]);
 
-  // Clear active note when month changes
   useEffect(() => {
     setActiveNoteDate(null);
+    setOpenPickerDate(null);
   }, [month]);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    if (!openPickerDate) return;
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as Element).closest("[data-picker]")) {
+        setOpenPickerDate(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [openPickerDate]);
 
   // Realtime subscription for availability and notes
   useEffect(() => {
@@ -150,15 +170,12 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
     };
   }, [groupId]);
 
-  async function toggleDay(dateStr: string) {
-    const current = availMap[dateStr]?.[currentUserId];
-    const next: AvailabilityStatus | null =
-      !current ? "day" : current === "day" ? "night" : current === "night" ? "busy" : null;
-
+  async function setDayStatus(dateStr: string, status: AvailabilityStatus | null) {
+    setOpenPickerDate(null);
     setAvailMap((prev) => {
       const updated = { ...prev, [dateStr]: { ...(prev[dateStr] ?? {}) } };
-      if (next) {
-        updated[dateStr][currentUserId] = next;
+      if (status) {
+        updated[dateStr][currentUserId] = status;
       } else {
         delete updated[dateStr][currentUserId];
       }
@@ -166,13 +183,13 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
     });
 
     const supabase = createClient();
-    if (next) {
+    if (status) {
       await supabase.from("availability").upsert(
         {
           user_id: currentUserId,
           group_id: groupId,
           date: dateStr,
-          status: next,
+          status,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id,group_id,date" }
@@ -291,15 +308,21 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
               const myStatus = dayAvail[currentUserId];
               const isPast = isBefore(day, today);
               const hasNote = !!notesMap[dateStr];
+              const isPickerOpen = openPickerDate === dateStr;
+              const dayOfWeek = getDay(day);
 
               const cellClass = [
-                "flex flex-col min-h-[64px] rounded-xl border p-1.5 text-left transition-all select-none",
+                "relative flex flex-col min-h-[64px] rounded-xl border p-1.5 text-left transition-all select-none",
                 myStatus === "day"
                   ? "bg-amber-50 border-amber-200"
                   : myStatus === "night"
                   ? "bg-indigo-50 border-indigo-300"
                   : myStatus === "busy"
                   ? "bg-red-50 border-red-200"
+                  : myStatus === "free"
+                  ? "bg-emerald-50 border-emerald-200"
+                  : myStatus === "homer"
+                  ? "bg-yellow-50 border-yellow-300"
                   : "bg-white border-slate-200",
                 isPast
                   ? "opacity-35 cursor-default"
@@ -313,15 +336,20 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
               return (
                 <div
                   key={dateStr}
+                  data-picker
                   role="button"
                   tabIndex={isPast ? -1 : 0}
                   aria-disabled={isPast}
-                  onClick={() => !isPast && toggleDay(dateStr)}
+                  onClick={() => {
+                    if (isPast) return;
+                    setOpenPickerDate(isPickerOpen ? null : dateStr);
+                  }}
                   onKeyDown={(e) => {
                     if (!isPast && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
-                      toggleDay(dateStr);
+                      setOpenPickerDate(isPickerOpen ? null : dateStr);
                     }
+                    if (e.key === "Escape") setOpenPickerDate(null);
                   }}
                   className={cellClass}
                 >
@@ -340,6 +368,16 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                       {myStatus === "night" && (
                         <span className="text-xs leading-none">🌙</span>
                       )}
+                      {myStatus === "free" && (
+                        <span className="text-xs leading-none">✅</span>
+                      )}
+                      {myStatus === "homer" && (
+                        <img
+                          src="/homer.png"
+                          alt="Homer"
+                          className="w-4 h-4 object-cover rounded-sm"
+                        />
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -356,6 +394,7 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                       </button>
                     </div>
                   </div>
+
                   {/* Member status dots */}
                   <div className="flex flex-wrap gap-0.5 mt-auto pt-1">
                     {members.map((member) => {
@@ -367,18 +406,22 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                           : status === "night"
                           ? "bg-indigo-400"
                           : status === "free"
-                          ? "bg-blue-400"
+                          ? "bg-emerald-400"
+                          : status === "homer"
+                          ? "bg-yellow-400"
                           : "bg-red-400";
                       return (
                         <span
                           key={member.user_id}
                           title={`${member.display_name}: ${status}`}
                           className={[
-                            "inline-flex items-center justify-center w-4 h-4 rounded-full",
-                            dotColor,
-                            member.avatar
-                              ? "text-[10px]"
-                              : "text-[9px] font-bold text-white",
+                            "inline-flex items-center justify-center w-4 h-4 rounded-full overflow-hidden",
+                            status !== "homer" ? dotColor : "",
+                            status !== "homer"
+                              ? member.avatar
+                                ? "text-[10px]"
+                                : "text-[9px] font-bold text-white"
+                              : "",
                             member.user_id === currentUserId
                               ? "ring-1 ring-slate-400 ring-offset-[1px]"
                               : "",
@@ -386,11 +429,64 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                             .filter(Boolean)
                             .join(" ")}
                         >
-                          {member.avatar ?? member.display_name[0]?.toUpperCase()}
+                          {status === "homer" ? (
+                            <img
+                              src="/homer.png"
+                              alt="Homer"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            member.avatar ?? member.display_name[0]?.toUpperCase()
+                          )}
                         </span>
                       );
                     })}
                   </div>
+
+                  {/* Status picker popover */}
+                  {isPickerOpen && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className={`absolute z-50 top-full mt-1 bg-white rounded-xl shadow-lg border border-slate-200 p-1 flex gap-0.5 min-w-max ${
+                        dayOfWeek >= 4 ? "right-0" : "left-0"
+                      }`}
+                    >
+                      {PICKER_OPTIONS.map(({ status, label, icon }) => (
+                        <button
+                          key={status}
+                          title={label}
+                          onClick={() =>
+                            setDayStatus(dateStr, myStatus === status ? null : status)
+                          }
+                          className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm transition-colors ${
+                            myStatus === status
+                              ? "bg-slate-100 ring-1 ring-slate-300"
+                              : "hover:bg-slate-50"
+                          }`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                      {/* Homer option */}
+                      <button
+                        title="Homer"
+                        onClick={() =>
+                          setDayStatus(dateStr, myStatus === "homer" ? null : "homer")
+                        }
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg overflow-hidden transition-colors ${
+                          myStatus === "homer"
+                            ? "ring-2 ring-yellow-400"
+                            : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <img
+                          src="/homer.png"
+                          alt="Homer"
+                          className="w-6 h-6 object-cover rounded"
+                        />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -398,15 +494,17 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
         )}
 
         {/* Legend */}
-        <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-400">
           <span className="flex items-center gap-1">☀️ Day</span>
           <span className="flex items-center gap-1">🌙 Night</span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded bg-red-100 border border-red-200 inline-block" />
-            Busy
+          <span className="flex items-center gap-1">🔴 Busy</span>
+          <span className="flex items-center gap-1">✅ Free</span>
+          <span className="flex items-center gap-1">
+            <img src="/homer.png" alt="Homer" className="w-3 h-3 rounded-full object-cover" />
+            Homer
           </span>
           <span className="flex items-center gap-1">📝 Note</span>
-          <span className="ml-auto">Click to cycle · 📝 to add note</span>
+          <span className="ml-auto">Click day to pick · 📝 to add note</span>
         </div>
 
         {/* Note editor */}
