@@ -371,13 +371,6 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                       {myStatus === "free" && (
                         <span className="text-xs leading-none">✅</span>
                       )}
-                      {myStatus === "homer" && (
-                        <img
-                          src="/homer.png"
-                          alt="Homer"
-                          className="w-4 h-4 object-cover rounded-sm"
-                        />
-                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -394,6 +387,17 @@ export default function CalendarGrid({ groupId, currentUserId, members }: Props)
                       </button>
                     </div>
                   </div>
+
+                  {/* Homer center image */}
+                  {myStatus === "homer" && (
+                    <div className="flex-1 min-h-0 py-0.5">
+                      <img
+                        src="/homer.png"
+                        alt="Homer"
+                        className="w-full h-full object-cover rounded-lg"
+                      />
+                    </div>
+                  )}
 
                   {/* Member status dots */}
                   <div className="flex flex-wrap gap-0.5 mt-auto pt-1">
